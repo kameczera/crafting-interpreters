@@ -1,0 +1,1 @@
+C:\workspace\rust\lox\target\debug\lox.exe: C:\workspace\rust\lox\src\lox\interpreter.rs C:\workspace\rust\lox\src\lox\scanner.rs C:\workspace\rust\lox\src\lox\token.rs C:\workspace\rust\lox\src\lox\token_type.rs C:\workspace\rust\lox\src\main.rs
