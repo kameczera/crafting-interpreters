@@ -1,6 +1,5 @@
 use super::token::*;
 use super::token_type::*;
-use byteorder::{BigEndian, ReadBytesExt};
 use std::collections::HashMap;
 
 pub struct Scanner {
@@ -102,6 +101,9 @@ impl Scanner {
             b'/' => {
                 if self.compl('/'){
                     while self.peek() != b'\n' && !self.is_at_end() { self.advance(); };
+                } else if self.compl('*'){
+                    while self.peek() != b'*' && self.peek_next() != b'/' && !self.is_at_end() { self.advance(); };
+                    self.current += 2;
                 } else {
                     self.add_token(TokenType::Slash);
                 }
