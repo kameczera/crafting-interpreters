@@ -1,94 +1,125 @@
 use super::expr::*;
-use super::token;
+use super::token::*;
+use super::token::Literal as Lit;
 use super::token_type::*;
 use super::token::*;
 use std::process;
+use crate::lox::lang::Lox;
+use std::cell::RefCell;
 
-pub struct Parser {
-    tokens: Vec<Token>,
+pub struct Parser<'a> {
+    tokens: &'a Vec<Token>,
     current: usize,
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+impl Parser<'_> {
+    pub fn new(tokens: &Vec<Token>) -> Parser {
         Parser {
             tokens: tokens,
             current: 0,
         }
     }
     
-    pub fn parse(&mut self) -> Expr {
+    pub fn parse(&mut self) -> Result<Expr, (Token, String)> {
         return self.expression();
     }
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result<Expr, (Token, String)> {
         return self.equality();
     }
 
-    fn equality(&mut self) -> Expr {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> Result<Expr, (Token, String)> {
+        let mut unwraped_expr = match self.comparison() {
+            Ok(expr) => expr,
+            Err((token, message)) => return Err((token, message)),
+        };
         while self.mtch(vec![TokenType::BangEqual,TokenType::EqualEqual]) {
             let operator = self.previous().clone();
             let right = self.comparison();
-            expr = Expr::binary(Box::new(expr), operator, Box::new(right));
+            match right {
+                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Err((token, message)) => return Err((token, message)),
+            };
         }
-        return expr;
+        return Ok(unwraped_expr);
     }
 
-    fn comparison(&mut self) -> Expr {
-        let mut expr = self.term();
-        while self.mtch(vec![TokenType::Greater, TokenType::GreaterEqual, TokenType::Less, TokenType::LessEqual]) {
+    fn comparison(&mut self) -> Result<Expr, (Token, String)> {
+        let mut unwraped_expr = match self.term() {
+            Ok(expr) => expr,
+            Err((token, message)) => return Err((token, message)),
+        };
+        while self.mtch(vec![TokenType::Minus, TokenType::Plus]) {
             let operator = self.previous().clone();
-            let right = self.comparison();
-            expr = Expr::binary(Box::new(expr), operator, Box::new(right));
+            let right = self.term();
+            match right {
+                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Err((token, message)) => return Err((token, message)),
+            };
         }
-        return expr;
+        return Ok(unwraped_expr);
     }
 
-    fn term(&mut self) -> Expr {
-        let mut expr = self.factor();
+    fn term(&mut self) -> Result<Expr, (Token, String)> {
+        let mut unwraped_expr = match self.factor() {
+            Ok(expr) => expr,
+            Err((token, message)) => return Err((token, message)),
+        };
         while self.mtch(vec![TokenType::Minus, TokenType::Plus]) {
             let operator = self.previous().clone();
             let right = self.factor();
-            expr = Expr::binary(Box::new(expr), operator, Box::new(right));
+            match right {
+                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Err((token, message)) => return Err((token, message)),
+            };
         }
-        return expr;
+        return Ok(unwraped_expr);
     }
 
-    fn factor(&mut self) -> Expr {
-        let mut expr = self.factor();
+    fn factor(&mut self) -> Result<Expr, (Token, String)> {
+        let mut unwraped_expr = match self.unary() {
+            Ok(expr) => expr,
+            Err((token, message)) => return Err((token, message)),
+        };
         while self.mtch(vec![TokenType::Slash, TokenType::Star]) {
             let operator = self.previous().clone();
-            let right = self.factor();
-            expr = Expr::binary(Box::new(expr), operator, Box::new(right));
+            let right = self.unary();
+            match right {
+                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Err((token, message)) => return Err((token, message)),
+            };
         }
-        return expr;
+        return Ok(unwraped_expr);
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Result<Expr, (Token, String)> {
         if self.mtch(vec![TokenType::Bang, TokenType::Minus]) {
-            let operator = self.previous().clone();
+            let operator: Token = self.previous().clone();
             let right = self.primary();
-            return Expr::unary(operator, Box::new(right));
+            let right = match right {
+                Ok(expr) => expr,
+                Err((token, message)) => return Err((token, message)),
+            };
+            return Ok(Expr::unary(operator, Box::new(right)));
         }
 
         return self.primary();
     }
 
-    fn primary(&mut self) -> Expr {
+    fn primary(&mut self) -> Result<Expr, (Token, String)> {
         if self.mtch(vec![TokenType::False]) {
-            return Expr::literal(Object::Boolean(false));
+            return Ok(Expr::literal(Object::Boolean(false)));
         } 
         if self.mtch(vec![TokenType::True]) {
-            return Expr::literal(Object::Boolean(true));
+            return Ok(Expr::literal(Object::Boolean(true)));
         }
         if self.mtch(vec![TokenType::Nil]) {
-            return Expr::literal(Object::Nil);
+            return Ok(Expr::literal(Object::Nil));
         }
         if self.mtch(vec![TokenType::Number, TokenType::String]) {
-            match(self.previous().literal.clone()) {
-               Literal::String(s) => return Expr::literal(Object::String(s)),
-               Literal::Number(s) => return Expr::literal(Object::Number(s)),
+            match self.previous().literal.clone() {
+               Lit::String(s) => return Ok(Expr::literal(Object::String(s))),
+               Lit::Number(s) => return Ok(Expr::literal(Object::Number(s))),
                _ => (), // Unreacheble
             }
             
@@ -97,12 +128,15 @@ impl Parser {
 
         }
         if self.mtch(vec![TokenType::LeftParen]) {
-            let expr: Expr = self.expression();
-            self.consume(TokenType::RightParen, String::from("Expect ')' after expression."));
-            return Expr::grouping(Box::new(expr));
+            let expr = self.expression();
+            let expr = match expr {
+                Ok(expr) => expr,
+                Err((token, message)) => return Err((token, message)),
+            };
+            let _ = self.consume(TokenType::RightParen, String::from("Expect ')' after expression."));
+            return Ok(Expr::grouping(Box::new(expr)));
         }
-        
-        self.error()
+        Err((self.peek().clone(), String::from("Expected expression."))) // Result<&Token, (u32, String, String)>
     }
 
     fn mtch(&mut self, types: Vec<TokenType>) -> bool {
@@ -115,22 +149,22 @@ impl Parser {
         return false;
     }
 
-    fn consume(&mut self, token_type: TokenType, message: String) -> &Token {
+    fn consume(&mut self, token_type: TokenType, message: String) -> Result<&Token, (Token, String)> {
         if self.check(token_type) {
-            return self.advance();
+            return Ok(self.advance());
         }
-        println!("Error");
-        process::exit(1);
+        return Err((self.peek().clone(), message))
     }
 
     fn check(&self, token_type: TokenType) -> bool {
         if self.is_at_end() {
             return false;
         }
-        if matches!(self.peek().token_type, token_type) {
+        // Use of discriminant (PartialEq)
+        if self.peek().token_type == token_type {
             return true;
         }
-        return matches!(self.peek().token_type, token_type);
+        return self.peek().token_type == token_type;
     }
 
     fn advance(&mut self) -> &Token {
@@ -155,12 +189,7 @@ impl Parser {
         return &self.tokens[self.current - 1];
     }
 
-    fn error(&self) -> Expr {
-        println!("Error");
-        process::exit(1);
-    }
-
-    fn synchrnonize(&mut self) {
+    fn synchronize(&mut self) {
         self.advance();
         while !self.is_at_end() {
             if let TokenType::Semicolon = self.peek().token_type {

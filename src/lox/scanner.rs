@@ -45,7 +45,7 @@ impl Scanner {
             self.start = self.current;
             self.scan_token();
         }
-
+        self.tokens.push(Token::new(TokenType::Eof, vec![], self.line, Literal::None));
         &self.tokens
     }
 
@@ -211,7 +211,6 @@ impl Scanner {
     
     fn add_token_literal(&mut self, token_type: TokenType, literal: Literal){
         let text = &self.source[self.start..self.current];
-        println!("{:?}", token_type);
         self.tokens.push(Token::new(token_type, text.to_vec(), self.line, literal));
     }
 }
