@@ -3,8 +3,12 @@ use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::Read;
+use std::process;
 
-use crate::TokenType;
+use crate::lox::interpreter;
+use crate::lox::interpreter::interpret;
+
+use super::token_type::TokenType;
 
 use super::ast_printer;
 use super::scanner::*;
@@ -14,11 +18,12 @@ use super::parser::*;
 
 pub struct Lox {
     had_error: bool,
+    had_runtime_error: bool,
 }
 
 impl Lox {
     pub fn new() -> Self {
-        Lox { had_error: false }
+        Lox { had_error: false, had_runtime_error: false }
     }
 
     pub fn run_file(&mut self, path: &String) -> Result<(), Box<dyn Error>> {
@@ -27,7 +32,10 @@ impl Lox {
         file.read_to_end(&mut buffer)?;
         self.run(buffer);
         if self.had_error {
-            println!("Error");
+            process::exit(1);
+        }
+        if self.had_runtime_error {
+            process::exit(1);
         }
         Ok(())
     }
@@ -56,15 +64,20 @@ impl Lox {
             Ok(expr) => expr,
             Err((token, message)) => return self.token_error(token, message),
         };
-        println!("{}", ast_printer::print(expression));
-        for token in tokens {
-            println!("{:?}", token);
+        match interpret(expression) {
+            Ok(()) => (),
+            Err(err) => self.run_time_error(err),
         }
 
     }
 
     pub fn error(&mut self, line: u32, message: String) {
         self.report(line, String::new(), message);
+    }
+
+    pub fn run_time_error(&mut self, err: (Token, String)) {
+        println!("{} \n[line {}]", err.1, err.0.line);
+        self.had_runtime_error = true;
     }
 
     pub fn report(&mut self, line: u32, col: String, message: String) {

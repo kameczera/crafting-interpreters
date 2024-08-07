@@ -10,6 +10,12 @@ pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
+pub struct Ternary {
+    pub expression: Box<Expr>,
+    pub true_part: Box<Expr>,
+    pub false_part: Box<Expr>,
+}
+
 pub struct Literal {
     pub value: Object,
 }
@@ -23,9 +29,11 @@ pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),
     Literal(Literal),
+    Ternary(Ternary),
     Unary(Unary),
 }
 
+#[derive(PartialEq)]
 pub enum Object {
     Boolean(bool),
     String(String),
@@ -46,21 +54,47 @@ impl Object {
             Object::Nil => String::from("nil"),
         }
     }
-
-    pub fn bool(bool: bool) -> Self {
-        Object::Boolean(bool)
+    pub fn bool(self) -> bool {
+        if let Object::Boolean(bool) = self {
+            bool
+        } else {
+            // Unreachable
+            panic!("Not a bool!");
+        }
     }
 
-    pub fn string(string: String) -> Self {
-        Object::String(string)
+    pub fn is_string(&self) -> bool {
+        if let Object::String(s) = self {
+            return true
+        } else {
+            return false
+        }
+    }
+
+    pub fn string(self) -> String {
+        if let Object::String(string) = self {
+            string
+        } else {
+            // Unreachable
+            panic!("Not a string!");
+        }
     }
     
-    pub fn number(number: f32) -> Self {
-        Object::Number(number)
+    pub fn number(self) -> f32 {
+        if let Object::Number(number) = self {
+            number
+        } else {
+            // Unreachable
+            panic!("Not a number!");
+        }
     }
 
-    pub fn nil() -> Self {
-        Object::Nil
+    pub fn is_number(&self) -> bool {
+        if let Object::Number(s) = self {
+            return true
+        } else {
+            return false
+        }
     }
 }
 
@@ -70,6 +104,14 @@ impl Expr {
             left: left,
             operator: operator,
             right: right,
+        })
+    }
+    
+    pub fn ternary(expression: Box<Expr>, true_part: Box<Expr>, false_part: Box<Expr>) -> Self {
+        Expr::Ternary(Ternary {
+            expression: expression,
+            true_part: true_part,
+            false_part: false_part,
         })
     }
 

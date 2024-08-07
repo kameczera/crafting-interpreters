@@ -1,15 +1,6 @@
 use std::env;
 use std::process;
 
-use lox::ast_printer;
-use lox::expr::*;
-use lox::token::*;
-use lox::token::Literal as Lit;
-use lox::token_type::*;
-use lox::ast_printer::*;
-
-use crate::lox::lang::Lox;
-
 mod lox {
     pub mod scanner;
     pub mod token;
@@ -18,7 +9,10 @@ mod lox {
     pub mod parser;
     pub mod expr;
     pub mod ast_printer;
+    pub mod interpreter;
 }
+
+use crate::lox::lang::Lox;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

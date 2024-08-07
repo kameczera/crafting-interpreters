@@ -25,20 +25,42 @@ impl Parser<'_> {
     }
 
     fn expression(&mut self) -> Result<Expr, (Token, String)> {
-        return self.equality();
+        return self.ternary();
+    }
+
+    fn ternary(&mut self) -> Result<Expr, (Token, String)> {
+        let mut unwraped_expr = match self.equality() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        if self.mtch(vec![TokenType::QuestionMark]) {
+            let true_part = match self.equality() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+            if !self.mtch(vec![TokenType::Colon]) {
+                return Err((self.peek().clone(), String::from("Expect ':'")));
+            }
+            let false_part = match self.equality() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+            unwraped_expr = Expr::ternary(Box::new(unwraped_expr), Box::new(true_part), Box::new(false_part));
+        }
+        return Ok(unwraped_expr);
     }
 
     fn equality(&mut self) -> Result<Expr, (Token, String)> {
         let mut unwraped_expr = match self.comparison() {
             Ok(expr) => expr,
-            Err((token, message)) => return Err((token, message)),
+            Err(err) => return Err(err),
         };
         while self.mtch(vec![TokenType::BangEqual,TokenType::EqualEqual]) {
             let operator = self.previous().clone();
             let right = self.comparison();
             match right {
                 Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
         }
         return Ok(unwraped_expr);
@@ -47,14 +69,14 @@ impl Parser<'_> {
     fn comparison(&mut self) -> Result<Expr, (Token, String)> {
         let mut unwraped_expr = match self.term() {
             Ok(expr) => expr,
-            Err((token, message)) => return Err((token, message)),
+            Err(err) => return Err(err),
         };
         while self.mtch(vec![TokenType::Minus, TokenType::Plus]) {
             let operator = self.previous().clone();
             let right = self.term();
             match right {
                 Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
         }
         return Ok(unwraped_expr);
@@ -63,14 +85,14 @@ impl Parser<'_> {
     fn term(&mut self) -> Result<Expr, (Token, String)> {
         let mut unwraped_expr = match self.factor() {
             Ok(expr) => expr,
-            Err((token, message)) => return Err((token, message)),
+            Err(err) => return Err(err),
         };
         while self.mtch(vec![TokenType::Minus, TokenType::Plus]) {
             let operator = self.previous().clone();
             let right = self.factor();
             match right {
                 Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
         }
         return Ok(unwraped_expr);
@@ -79,14 +101,14 @@ impl Parser<'_> {
     fn factor(&mut self) -> Result<Expr, (Token, String)> {
         let mut unwraped_expr = match self.unary() {
             Ok(expr) => expr,
-            Err((token, message)) => return Err((token, message)),
+            Err(err) => return Err(err),
         };
         while self.mtch(vec![TokenType::Slash, TokenType::Star]) {
             let operator = self.previous().clone();
             let right = self.unary();
             match right {
                 Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
         }
         return Ok(unwraped_expr);
@@ -98,7 +120,7 @@ impl Parser<'_> {
             let right = self.primary();
             let right = match right {
                 Ok(expr) => expr,
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
             return Ok(Expr::unary(operator, Box::new(right)));
         }
@@ -131,7 +153,7 @@ impl Parser<'_> {
             let expr = self.expression();
             let expr = match expr {
                 Ok(expr) => expr,
-                Err((token, message)) => return Err((token, message)),
+                Err(err) => return Err(err),
             };
             let _ = self.consume(TokenType::RightParen, String::from("Expect ')' after expression."));
             return Ok(Expr::grouping(Box::new(expr)));

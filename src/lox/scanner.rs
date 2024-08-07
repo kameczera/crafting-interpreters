@@ -66,6 +66,8 @@ impl Scanner {
             b'+' => self.add_token(TokenType::Plus),
             b';' => self.add_token(TokenType::Semicolon),
             b'*' => self.add_token(TokenType::Star),
+            b'?' => self.add_token(TokenType::QuestionMark),
+            b':' => self.add_token(TokenType::Colon),
             b'!' => {
                 let token_type = if self.compl('=') {
                     TokenType::BangEqual
