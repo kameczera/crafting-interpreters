@@ -8,8 +8,10 @@ mod lox {
     pub mod lang;
     pub mod parser;
     pub mod expr;
-    pub mod ast_printer;
+    // pub mod ast_nner;
     pub mod interpreter;
+    pub mod stmt;
+    pub mod environment;
 }
 
 use crate::lox::lang::Lox;

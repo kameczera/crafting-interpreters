@@ -5,12 +5,13 @@ use std::io;
 use std::io::Read;
 use std::process;
 
+use crate::lox::expr;
 use crate::lox::interpreter;
-use crate::lox::interpreter::interpret;
 
+use super::interpreter::Interpreter;
 use super::token_type::TokenType;
 
-use super::ast_printer;
+// use super::ast_printer;
 use super::scanner::*;
 use super::token::*;
 use super::parser::*;
@@ -64,8 +65,9 @@ impl Lox {
             Ok(expr) => expr,
             Err((token, message)) => return self.token_error(token, message),
         };
-        match interpret(expression) {
-            Ok(()) => (),
+        let mut interpreter: Interpreter = Interpreter::new();
+        match interpreter.interpret(expression) {
+            Ok(_) => (),
             Err(err) => self.run_time_error(err),
         }
 

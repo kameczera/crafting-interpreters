@@ -1,39 +1,45 @@
 use super::token::*;
-
+#[derive(Debug)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
-
+#[derive(Debug)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
-
+#[derive(Debug)]
 pub struct Ternary {
     pub expression: Box<Expr>,
     pub true_part: Box<Expr>,
     pub false_part: Box<Expr>,
 }
-
+#[derive(Debug)]
 pub struct Literal {
     pub value: Object,
 }
-
+#[derive(Debug)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
+#[derive(Debug)]
+pub struct Variable {
+    pub name: Token,
+}
 
+#[derive(Debug)]
 pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),
     Literal(Literal),
     Ternary(Ternary),
     Unary(Unary),
+    Variable(Variable),
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Object {
     Boolean(bool),
     String(String),
@@ -99,26 +105,26 @@ impl Object {
 }
 
 impl Expr {
-    pub fn binary(left: Box<Expr>, operator: Token, right: Box<Expr>) -> Self {
+    pub fn binary(left: Expr, operator: Token, right: Expr) -> Self {
         Expr::Binary(Binary {
-            left: left,
+            left: Box::new(left),
             operator: operator,
-            right: right,
+            right: Box::new(right),
         })
     }
     
-    pub fn ternary(expression: Box<Expr>, true_part: Box<Expr>, false_part: Box<Expr>) -> Self {
+    pub fn ternary(expression: Expr, true_part: Expr, false_part: Expr) -> Self {
         Expr::Ternary(Ternary {
-            expression: expression,
-            true_part: true_part,
-            false_part: false_part,
+            expression: Box::new(expression),
+            true_part: Box::new(true_part),
+            false_part: Box::new(false_part),
         })
     }
 
-    pub fn unary(operator: Token, right: Box<Expr>) -> Self {
+    pub fn unary(operator: Token, right: Expr) -> Self {
         Expr::Unary (Unary {
             operator: operator,
-            right: right,
+            right: Box::new(right),
         })
     }
 
@@ -128,9 +134,14 @@ impl Expr {
         })
     }
 
-    pub fn grouping(expression: Box<Expr>) -> Self {
-        Expr::Grouping (Grouping {
-            expression: expression,
+    pub fn grouping(expression: Expr) -> Self {
+        Expr::Grouping(Grouping {
+            expression: Box::new(expression),
+        })
+    }
+    pub fn variable(name: Token) -> Self {
+        Expr::Variable(Variable {
+            name: name,
         })
     }
 }

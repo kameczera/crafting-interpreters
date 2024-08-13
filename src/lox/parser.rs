@@ -1,9 +1,12 @@
 use super::expr::*;
+use super::stmt::Statement;
+use super::token;
 use super::token::*;
 use super::token::Literal as Lit;
 use super::token_type::*;
 use super::token::*;
 use std::process;
+use std::result;
 use crate::lox::lang::Lox;
 use std::cell::RefCell;
 
@@ -20,14 +23,87 @@ impl Parser<'_> {
         }
     }
     
-    pub fn parse(&mut self) -> Result<Expr, (Token, String)> {
-        return self.expression();
+    pub fn parse(&mut self) -> Result<Vec<Statement>, (Token, String)> {
+        let mut statements = vec![];
+        while !self.is_at_end() {
+            match self.declaration() {
+                Ok(statement) => statements.push(statement),
+                Err(err) => return Err(err),
+            }
+        }
+        return Ok(statements);
     }
 
     fn expression(&mut self) -> Result<Expr, (Token, String)> {
         return self.ternary();
     }
 
+    fn declaration(&mut self) -> Result<Statement, (Token, String)> {
+        if self.mtch(vec![TokenType::Var]) {
+            return self.var_declaration();
+        }
+
+        match self.statement() {
+            Ok(statement) => return Ok(statement),
+            Err(err) => {
+                self.synchronize();
+                return Err(err);
+            }
+        }
+    }
+
+    fn statement(&mut self) -> Result<Statement, (Token, String)> {
+        if self.mtch(vec![TokenType::Print]) {
+            return self.print_statement();
+        }
+        return self.expression_statement();
+    }
+
+    fn print_statement(&mut self) -> Result<Statement, (Token, String)> {
+        let unwraped_expr = match self.expression() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        match self.consume(TokenType::Semicolon, String::from("Expect ';' after value.")) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        return Ok(Statement::print(unwraped_expr));
+    }
+
+    fn var_declaration(&mut self) -> Result<Statement, (Token, String)> {
+        let name = match self.consume(TokenType::Identifier, String::from("Expect variable name")) {
+            Ok(token) => token.clone(),
+            Err(err) => return Err(err),
+        };
+        let mut initializer = Expr::literal(Object::Nil);
+        if self.mtch(vec![TokenType::Equal]) {
+            match self.expression() {
+                Ok(expr) => {
+                    initializer = expr;
+                },
+                Err(err) => return Err(err),
+            }
+        }
+        match self.consume(TokenType::Semicolon, String::from("Expect ';' after variable declaration.")) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        return Ok(Statement::var(name, initializer));
+    }
+    
+    fn expression_statement(&mut self) -> Result<Statement, (Token, String)> {
+        let unwraped_expr = match self.expression() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        match self.consume(TokenType::Semicolon, String::from("Expect ';' after expression.")) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        return Ok(Statement::expression(unwraped_expr));
+    }
+    
     fn ternary(&mut self) -> Result<Expr, (Token, String)> {
         let mut unwraped_expr = match self.equality() {
             Ok(expr) => expr,
@@ -45,7 +121,7 @@ impl Parser<'_> {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
-            unwraped_expr = Expr::ternary(Box::new(unwraped_expr), Box::new(true_part), Box::new(false_part));
+            unwraped_expr = Expr::ternary(unwraped_expr, true_part, false_part);
         }
         return Ok(unwraped_expr);
     }
@@ -59,7 +135,7 @@ impl Parser<'_> {
             let operator = self.previous().clone();
             let right = self.comparison();
             match right {
-                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Ok(expr) => unwraped_expr = Expr::binary(unwraped_expr, operator, expr),
                 Err(err) => return Err(err),
             };
         }
@@ -75,7 +151,7 @@ impl Parser<'_> {
             let operator = self.previous().clone();
             let right = self.term();
             match right {
-                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Ok(expr) => unwraped_expr = Expr::binary(unwraped_expr, operator, expr),
                 Err(err) => return Err(err),
             };
         }
@@ -91,7 +167,7 @@ impl Parser<'_> {
             let operator = self.previous().clone();
             let right = self.factor();
             match right {
-                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Ok(expr) => unwraped_expr = Expr::binary(unwraped_expr, operator, expr),
                 Err(err) => return Err(err),
             };
         }
@@ -107,7 +183,7 @@ impl Parser<'_> {
             let operator = self.previous().clone();
             let right = self.unary();
             match right {
-                Ok(expr) => unwraped_expr = Expr::binary(Box::new(unwraped_expr), operator, Box::new(expr)),
+                Ok(expr) => unwraped_expr = Expr::binary(unwraped_expr, operator, expr),
                 Err(err) => return Err(err),
             };
         }
@@ -122,7 +198,7 @@ impl Parser<'_> {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
-            return Ok(Expr::unary(operator, Box::new(right)));
+            return Ok(Expr::unary(operator, right));
         }
 
         return self.primary();
@@ -146,8 +222,8 @@ impl Parser<'_> {
             }
             
         }
-        if self.mtch(vec![TokenType::String]) {
-
+        if self.mtch(vec![TokenType::Identifier]) {
+            return Ok(Expr::variable(self.previous().clone()));
         }
         if self.mtch(vec![TokenType::LeftParen]) {
             let expr = self.expression();
@@ -155,8 +231,11 @@ impl Parser<'_> {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
-            let _ = self.consume(TokenType::RightParen, String::from("Expect ')' after expression."));
-            return Ok(Expr::grouping(Box::new(expr)));
+            match self.consume(TokenType::RightParen, String::from("Expect ')' after expression.")) {
+                Ok(_) => (),
+                Err(err) => return Err(err),
+            }
+            return Ok(Expr::grouping(expr));
         }
         Err((self.peek().clone(), String::from("Expected expression."))) // Result<&Token, (u32, String, String)>
     }
