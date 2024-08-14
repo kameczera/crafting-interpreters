@@ -32,7 +32,8 @@ impl Interpreter {
             Expr::Literal(expr) => Ok(self.visit_literal(expr)),
             Expr::Unary(expr) => self.visit_unary(expr),
             Expr::Ternary(expr) => self.visit_ternary(expr),
-            Expr::Variable(expr) => {self.visit_variable(expr)},
+            Expr::Variable(expr) => self.visit_variable(expr),
+            Expr::Assign(expr) => self.visit_assign_expr(expr),
         }
     }
     
@@ -45,7 +46,9 @@ impl Interpreter {
     }
     
     fn visit_expression_statement(&mut self, expr: Expr) -> Result<Object, (Token, String)> {
-        let _ = self.evaluate(expr);
+        if let Err(err) = self.evaluate(expr) {
+            return Err(err)
+        }
         return Ok(Object::Nil);
     }
     
@@ -62,7 +65,6 @@ impl Interpreter {
     
     fn visit_var_statement(&mut self, statement: Var) -> Result<Object, (Token, String)> {
         let mut value = Object::Nil;
-        println!("{:?}", *statement.initializer);
         match *statement.initializer {
             Expr::Literal(Lit { value: Object::Nil }) => {
                 value = Object::Nil;
@@ -76,6 +78,17 @@ impl Interpreter {
         }
         self.environment.define(statement.name.lexeme, value);
         return Ok(Object::Nil);
+    }
+
+    fn visit_assign_expr(&mut self, expr: Assign) -> Result<Object, (Token, String)> {
+        let value = match self.evaluate(*expr.value) {
+            Ok(object) => object,
+            Err(err) => return Err(err),
+        };
+        match self.environment.assign(expr.name, &value) {
+            Ok(()) => {return Ok(value)},
+            Err(err) => {return Err(err)},
+        }
     }
     
     fn visit_binary(&mut self, expr: Binary) -> Result<Object, (Token, String)> {

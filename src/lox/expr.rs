@@ -1,37 +1,49 @@
 use super::token::*;
+
 #[derive(Debug)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
+
 #[derive(Debug)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
+
 #[derive(Debug)]
 pub struct Ternary {
     pub expression: Box<Expr>,
     pub true_part: Box<Expr>,
     pub false_part: Box<Expr>,
 }
+
 #[derive(Debug)]
 pub struct Literal {
     pub value: Object,
 }
+
 #[derive(Debug)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
+
 #[derive(Debug)]
 pub struct Variable {
     pub name: Token,
 }
 
 #[derive(Debug)]
+pub struct Assign {
+    pub name: Token,
+    pub value: Box<Expr>,
+}
+#[derive(Debug)]
 pub enum Expr {
     Binary(Binary),
+    Assign(Assign),
     Grouping(Grouping),
     Literal(Literal),
     Ternary(Ternary),
@@ -39,7 +51,7 @@ pub enum Expr {
     Variable(Variable),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Object {
     Boolean(bool),
     String(String),
@@ -142,6 +154,13 @@ impl Expr {
     pub fn variable(name: Token) -> Self {
         Expr::Variable(Variable {
             name: name,
+        })
+    }
+
+    pub fn assign(name: Token, value: Expr) -> Self {
+        Expr::Assign(Assign {
+            name: name,
+            value: Box::new(value),
         })
     }
 }

@@ -35,7 +35,31 @@ impl Parser<'_> {
     }
 
     fn expression(&mut self) -> Result<Expr, (Token, String)> {
-        return self.ternary();
+        return self.assignment();
+    }
+
+    fn assignment(&mut self) -> Result<Expr, (Token, String)> {
+        let expr = match self.ternary() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+
+        if self.mtch(vec![TokenType::Equal]) {
+            let equals: Token = self.previous().clone();
+            let value = match self.assignment() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+
+            match expr {
+                Expr::Variable(variable) => {
+                    let name = variable.name;
+                    return Ok(Expr::assign(name, value));
+                }
+                _ => return Err((equals, String::from("Invalid assignment target."))),
+            }
+        }
+        return Ok(expr);
     }
 
     fn declaration(&mut self) -> Result<Statement, (Token, String)> {

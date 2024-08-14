@@ -26,4 +26,15 @@ impl Environment {
             }
         }
     }
+
+    pub fn assign(&mut self, name: Token, value: &Object) -> Result<(), (Token, String)> {
+        match self.values.get_mut(&name.lexeme) {
+            Some(x) => *x = value.clone(),
+            None => {
+                let lexeme_name = String::from_utf8(name.lexeme.clone()).unwrap();
+                return Err((name, format!("Undefined variable '{}'.", lexeme_name)))
+            }
+        }
+        return Ok(());
+    }
 }
