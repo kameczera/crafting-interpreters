@@ -1,4 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
+use std::mem;
+
+use super::{environment, objects::*};
 
 use super::{
     environment::*, expr::{Literal as Lit, *}, stmt::*, token::{Literal as TokenLiteral, *}, token_type::TokenType
@@ -42,7 +44,26 @@ impl Interpreter {
             Statement::Expression(expression) => self.visit_expression_statement(*expression.expression),
             Statement::Print(print) => self.visit_print_statement(*print.expression),
             Statement::Var(var) => self.visit_var_statement(var),
+            Statement::Block(block) => self.visit_block_statement(block),
         }
+    }
+
+    fn execute_block(&mut self, statements: Vec<Statement>, mut old_env: Environment) -> Result<Object, (Token, String)> {
+        for statement in statements {
+            if let Err(err) = self.execute(statement) {
+                return Err(err)
+            }
+        }
+        mem::swap(&mut self.environment, &mut old_env);
+        self.environment.set_father(old_env);
+        return Ok(Object::Nil);
+    }
+
+    fn visit_block_statement(&mut self, block: Block) -> Result<Object, (Token, String)> {
+        // The next line swaps old_env with self.environment, so the variable name will make sense.
+        let mut old_env = Environment::new();
+        mem::swap(&mut self.environment, &mut old_env);
+        return self.execute_block(block.statements, old_env);
     }
     
     fn visit_expression_statement(&mut self, expr: Expr) -> Result<Object, (Token, String)> {

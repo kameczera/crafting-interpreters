@@ -1,5 +1,9 @@
 use super::{expr::*, token::Token};
 
+pub struct Block {
+    pub statements: Vec<Statement>,
+}
+
 pub struct Expression {
     pub expression: Box<Expr>,
 }
@@ -14,6 +18,7 @@ pub struct Var {
 }
 
 pub enum Statement {
+    Block(Block),
     Expression(Expression),
     Print(Print),
     Var(Var),
@@ -36,6 +41,12 @@ impl Statement {
         Statement::Var(Var {
             name: name,
             initializer: Box::new(initializer),
+        })
+    }
+
+    pub fn block(statements: Vec<Statement>) -> Self {
+        Statement::Block(Block {
+            statements: statements,
         })
     }
 }

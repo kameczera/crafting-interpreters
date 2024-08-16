@@ -1,14 +1,9 @@
 use super::expr::*;
 use super::stmt::Statement;
-use super::token;
 use super::token::*;
 use super::token::Literal as Lit;
 use super::token_type::*;
-use super::token::*;
-use std::process;
-use std::result;
-use crate::lox::lang::Lox;
-use std::cell::RefCell;
+use super::objects::*;
 
 pub struct Parser<'a> {
     tokens: &'a Vec<Token>,
@@ -80,6 +75,13 @@ impl Parser<'_> {
         if self.mtch(vec![TokenType::Print]) {
             return self.print_statement();
         }
+        if self.mtch(vec![TokenType::LeftBrace]) {
+            let statements = match self.block() {
+                Ok(statements) => statements,
+                Err(err) => return Err(err),
+            };
+            return Ok(Statement::block(statements));
+        }
         return self.expression_statement();
     }
 
@@ -126,6 +128,19 @@ impl Parser<'_> {
             Err(err) => return Err(err),
         }
         return Ok(Statement::expression(unwraped_expr));
+    }
+    
+    fn block(&mut self) -> Result<Vec<Statement>, (Token, String)> {
+        let mut statements: Vec<Statement> = vec![];
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            match self.declaration() {
+                Ok(statement) => statements.push(statement),
+                Err(err) => return Err(err),
+            }
+        }
+        self.consume(TokenType::RightBrace, String::from("Expect '}' after block."));
+        return Ok(statements);
     }
     
     fn ternary(&mut self) -> Result<Expr, (Token, String)> {
