@@ -20,10 +20,10 @@ use crate::lox::lang::Lox;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut lox: Lox = Lox::new();
-    if args.len() > 1 {
+    if args.len() > 2 {
         println!("Usage: jlox [script]");
         process::exit(1);
-    } else if args.len() == 5 {
+    } else if args.len() == 2 {
         let _ = lox.run_file(&args[0]).unwrap_or_else(|_| {
             println!("Error");
         });

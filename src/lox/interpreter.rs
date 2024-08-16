@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::mem;
+use std::rc::Rc;
 
 use super::{environment, objects::*};
 
@@ -7,11 +9,11 @@ use super::{
 };
 
 
-pub struct Interpreter {
-    environment: Environment,
+pub struct Interpreter<'a> {
+    environment: Rc<RefCell<environment::Environment<'a>>>,
 }
 
-impl Interpreter {
+impl<'a> Interpreter<'a> {
     pub fn new() -> Self {
         Interpreter {
             environment: Environment::new(),
@@ -48,22 +50,27 @@ impl Interpreter {
         }
     }
 
-    fn execute_block(&mut self, statements: Vec<Statement>, mut old_env: Environment) -> Result<Object, (Token, String)> {
+    fn execute_block(&mut self, statements: Vec<Statement>, mut old_env: Rc<RefCell<environment::Environment<'a>>>) -> Result<Object, (Token, String)> {
         for statement in statements {
             if let Err(err) = self.execute(statement) {
                 return Err(err)
             }
         }
         mem::swap(&mut self.environment, &mut old_env);
-        self.environment.set_father(old_env);
         return Ok(Object::Nil);
     }
 
     fn visit_block_statement(&mut self, block: Block) -> Result<Object, (Token, String)> {
-        // The next line swaps old_env with self.environment, so the variable name will make sense.
-        let mut old_env = Environment::new();
-        mem::swap(&mut self.environment, &mut old_env);
-        return self.execute_block(block.statements, old_env);
+        // Create a new child environment that encloses the current one
+        let new_env = Environment::new_child(Rc::clone(&self.environment));
+        
+        // Swap the current environment with the new child environment
+        let old_env = mem::replace(&mut self.environment, new_env);
+        
+        // Execute the block in the new environment
+        let result = self.execute_block(block.statements, old_env);
+        
+        result
     }
     
     fn visit_expression_statement(&mut self, expr: Expr) -> Result<Object, (Token, String)> {
@@ -97,7 +104,7 @@ impl Interpreter {
                 };
             }
         }
-        self.environment.define(statement.name.lexeme, value);
+        self.environment.borrow_mut().define(statement.name.lexeme, value);
         return Ok(Object::Nil);
     }
 
@@ -106,7 +113,7 @@ impl Interpreter {
             Ok(object) => object,
             Err(err) => return Err(err),
         };
-        match self.environment.assign(expr.name, &value) {
+        match self.environment.borrow_mut().assign(expr.name, &value) {
             Ok(()) => {return Ok(value)},
             Err(err) => {return Err(err)},
         }
@@ -289,7 +296,7 @@ impl Interpreter {
     }
     
     fn visit_variable(&mut self, expr: Variable) -> Result<Object, (Token, String)> {
-        let t = self.environment.get(expr.name);
+        let t = self.environment.borrow_mut().get(expr.name);
         return t;
     }
     

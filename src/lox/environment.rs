@@ -1,34 +1,32 @@
 use std::collections::HashMap;
 use std::mem;
+use std::cell::RefCell;
+use std::rc::Rc;
 use super::token::Token;
 use super::objects::*;
 
-pub struct Environment {
-    pub enclosing: Option<Box<Environment>>,
+pub struct Environment<'a> {
+    pub enclosing: Option<Rc<RefCell<Environment<'a>>>>,
     values: HashMap<Vec<u8>, Object>,
 }
 
-impl Environment {
-    pub fn new() -> Self {
-        Environment {
+impl<'a> Environment<'a> {
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Environment {
             enclosing: None,
-            values: HashMap::from([]),
-        }
-    }
-    
-    pub fn new_child(enclosing: Environment) -> Self {
-        Environment {
-            enclosing: Option::Some(Box::new(enclosing)),
-            values: HashMap::from([]),
-        }
+            values: HashMap::new(),
+        }))
     }
 
-    pub fn set_father(&mut self, enclosing: Environment) {
-        self.enclosing = Some(Box::new(enclosing));
+    pub fn new_child(enclosing: Rc<RefCell<Environment<'a>>>) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Environment {
+            enclosing: Some(enclosing),
+            values: HashMap::new(),
+        }))
     }
 
-    pub fn swap_env(&mut self) -> Option<Box<Environment>> {
-        mem::replace(&mut self.enclosing, None)
+    pub fn set_father(&mut self, enclosing: Rc<RefCell<Environment<'a>>>) {
+        self.enclosing = Some(enclosing);
     }
 
     pub fn define(&mut self, name: Vec<u8>, value: Object) {
@@ -36,30 +34,30 @@ impl Environment {
         println!("{:?}", self.values);
     }
 
-    pub fn get(&mut self, name: Token) -> Result<Object, (Token, String)> {
-        match self.values.remove(&name.lexeme) {
-            Some(object) => return Ok(object),
+    pub fn get(&self, name: Token) -> Result<Object, (Token, String)> {
+        match self.values.get(&name.lexeme) {
+            Some(object) => return Ok(object.clone()),
             None => {
-                if let Some(ref mut enclosing) = self.enclosing {
-                    return enclosing.get(name);
+                if let Some(ref enclosing) = self.enclosing {
+                    return enclosing.borrow().get(name);
                 }
                 let string = format!("Undefined variable '{}'.", String::from_utf8(name.lexeme.clone()).unwrap());
                 return Err((name, string));
             }
         }
     }
-
+    
     pub fn assign(&mut self, name: Token, value: &Object) -> Result<(), (Token, String)> {
         match self.values.get_mut(&name.lexeme) {
             Some(x) => *x = value.clone(),
             None => {
-                if let Some(ref mut enclosing) = self.enclosing {
-                    return enclosing.assign(name, value);
+                if let Some(ref enclosing) = self.enclosing {
+                    return enclosing.borrow_mut().assign(name, value);
                 }
                 let lexeme_name = String::from_utf8(name.lexeme.clone()).unwrap();
-                return Err((name, format!("Undefined variable '{}'.", lexeme_name)))
+                return Err((name, format!("Undefined variable '{}'.", lexeme_name)));
             }
         }
-        return Ok(());
+        Ok(())
     }
 }
