@@ -1,3 +1,5 @@
+use std::vec;
+
 use super::expr::*;
 use super::stmt::Statement;
 use super::token::*;
@@ -38,14 +40,12 @@ impl Parser<'_> {
             Ok(expr) => expr,
             Err(err) => return Err(err),
         };
-
         if self.mtch(vec![TokenType::Equal]) {
             let equals: Token = self.previous().clone();
             let value = match self.assignment() {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
-
             match expr {
                 Expr::Variable(variable) => {
                     let name = variable.name;
@@ -53,6 +53,38 @@ impl Parser<'_> {
                 }
                 _ => return Err((equals, String::from("Invalid assignment target."))),
             }
+        }
+        return Ok(expr);
+    }
+
+    fn or(&mut self) -> Result<Expr, (Token, String)> {
+        let mut expr = match self.and() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        while self.mtch(vec![TokenType::Or]) {
+            let operator = self.previous().clone();
+            let right = match self.and() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+            expr = Expr::logical(expr, operator, right);
+        }
+        return Ok(expr);
+    }
+
+    fn and(&mut self) -> Result<Expr, (Token, String)> {
+        let mut expr = match self.equality() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        while self.mtch(vec![TokenType::And]) {
+            let operator = self.previous().clone();
+            let right = match self.equality() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+            expr = Expr::logical(expr, operator, right)
         }
         return Ok(expr);
     }
@@ -72,9 +104,16 @@ impl Parser<'_> {
     }
 
     fn statement(&mut self) -> Result<Statement, (Token, String)> {
+        if self.mtch(vec![TokenType::If]) {
+            return self.if_statement();
+        }
         if self.mtch(vec![TokenType::Print]) {
             return self.print_statement();
         }
+        if self.mtch(vec![TokenType::While]) {
+            return self.while_statement();
+        }
+
         if self.mtch(vec![TokenType::LeftBrace]) {
             let statements = match self.block() {
                 Ok(statements) => statements,
@@ -83,6 +122,31 @@ impl Parser<'_> {
             return Ok(Statement::block(statements));
         }
         return self.expression_statement();
+    }
+
+    fn if_statement(&mut self) -> Result<Statement, (Token, String)> {
+        if let Err(err) = self.consume(TokenType::LeftParen, String::from("Expect '(' after 'if'.")) {
+            return Err(err)
+        }
+        let condition = match self.expression() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        if let Err(err) = self.consume(TokenType::RightParen, String::from("Expect ')' after 'if'.")) {
+            return Err(err)
+        }
+        let then_branch = match self.statement() {
+            Ok(expr) => expr,
+            Err(err) => return Err(err),
+        };
+        let mut else_branch = Statement::Null;
+        if self.mtch(vec![TokenType::Else]) {
+            else_branch = match self.statement() {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+        }
+        return Ok(Statement::if_branch(condition, then_branch, else_branch))
     }
 
     fn print_statement(&mut self) -> Result<Statement, (Token, String)> {
@@ -117,6 +181,27 @@ impl Parser<'_> {
         }
         return Ok(Statement::var(name, initializer));
     }
+
+    fn while_statement(&mut self) -> Result<Statement, (Token, String)> {
+        match self.consume(TokenType::LeftParen, String::from("Expect '(' after 'while'.")) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        let condition = match self.expression() {
+            Ok(statement) => statement,
+            Err(err) => {return Err(err)},
+        };
+        match self.consume(TokenType::RightParen, String::from("Expect ')' after 'while'.")) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        }
+        let body = match self.statement() {
+            Ok(statement) => statement,
+            Err(err) => return Err(err),
+        };
+        return Ok(Statement::while_branch(condition, body));
+        
+    }
     
     fn expression_statement(&mut self) -> Result<Statement, (Token, String)> {
         let unwraped_expr = match self.expression() {
@@ -144,19 +229,19 @@ impl Parser<'_> {
     }
     
     fn ternary(&mut self) -> Result<Expr, (Token, String)> {
-        let mut unwraped_expr = match self.equality() {
+        let mut unwraped_expr = match self.or() {
             Ok(expr) => expr,
             Err(err) => return Err(err),
         };
         if self.mtch(vec![TokenType::QuestionMark]) {
-            let true_part = match self.equality() {
+            let true_part = match self.or() {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
             if !self.mtch(vec![TokenType::Colon]) {
                 return Err((self.peek().clone(), String::from("Expect ':'")));
             }
-            let false_part = match self.equality() {
+            let false_part = match self.or() {
                 Ok(expr) => expr,
                 Err(err) => return Err(err),
             };
@@ -186,7 +271,7 @@ impl Parser<'_> {
             Ok(expr) => expr,
             Err(err) => return Err(err),
         };
-        while self.mtch(vec![TokenType::Minus, TokenType::Plus]) {
+        while self.mtch(vec![TokenType::Greater, TokenType::GreaterEqual, TokenType::Less, TokenType::LessEqual]) {
             let operator = self.previous().clone();
             let right = self.term();
             match right {

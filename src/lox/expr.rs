@@ -1,52 +1,60 @@
 use super::token::*;
 use super::objects::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ternary {
     pub expression: Box<Expr>,
     pub true_part: Box<Expr>,
     pub false_part: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub value: Object,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct Logical {
+    pub left: Box<Expr>,
+    pub operator: Token,
+    pub right: Box<Expr>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Variable {
     pub name: Token,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Binary(Binary),
     Assign(Assign),
     Grouping(Grouping),
     Literal(Literal),
+    Logical(Logical),
     Ternary(Ternary),
     Unary(Unary),
     Variable(Variable),
@@ -79,6 +87,14 @@ impl Expr {
     pub fn literal(value: Object) -> Self {
         Expr::Literal(Literal {
             value: value 
+        })
+    }
+
+    pub fn logical(left: Expr, operator: Token, right: Expr) -> Self {
+        Expr::Logical(Logical {
+            left: Box::new(left),
+            operator: operator,
+            right: Box::new(right),
         })
     }
 
