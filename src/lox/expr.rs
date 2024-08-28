@@ -58,6 +58,7 @@ pub enum Expr {
     Ternary(Ternary),
     Unary(Unary),
     Variable(Variable),
+    Null,
 }
 
 impl Expr {

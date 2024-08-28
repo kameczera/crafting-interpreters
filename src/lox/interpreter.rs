@@ -43,12 +43,13 @@ impl<'a> Interpreter<'a> {
         match expr {
             Expr::Binary(expr) => self.visit_binary(expr),
             Expr::Grouping(expr) => self.visit_grouping(expr),
-            Expr::Literal(expr) => Ok(self.visit_literal(expr)),
+            Expr::Literal(expr) => self.visit_literal(expr),
             Expr::Logical(expr) => self.visit_logical_expr(expr),
             Expr::Unary(expr) => self.visit_unary(expr),
             Expr::Ternary(expr) => self.visit_ternary(expr),
             Expr::Variable(expr) => self.visit_variable(expr),
             Expr::Assign(expr) => self.visit_assign_expr(expr),
+            Expr::Null => return Ok(Object::Nil),
         }
     }
 
@@ -142,15 +143,8 @@ impl<'a> Interpreter<'a> {
 
     fn visit_while_statement(&mut self, statement: While) -> Result<Object, (Token, String)> { 
         loop {
-            // let condition = match self.evaluate(*statement.condition.clone()) {
-            //     Ok(object) => object,
-            //     Err(err) => return Err(err),
-            // };
-            let condition = self.evaluate(*statement.condition).unwrap_or_else(|err| {
-                return Err(err); // Return the error from the function
-            });
-            if self.is_truthy(&self.evaluate(*statement.condition).unwrap_or_else(|err: (Token, String)| -> (Token, String) {return Err(err)})) {
-            // if self.is_truthy(&condition) {
+            let condition = self.evaluate(*statement.condition.clone())?;
+            if self.is_truthy(&condition) {
                 match self.execute(*statement.body.clone()) {
                     Ok(_) => (),
                     Err(err) => return Err(err),
@@ -164,10 +158,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn visit_assign_expr(&mut self, expr: Assign) -> Result<Object, (Token, String)> {
-        let value = match self.evaluate(*expr.value) {
-            Ok(object) => object,
-            Err(err) => return Err(err),
-        };
+        let value = self.evaluate(*expr.value)?;
         match self.environment.borrow_mut().assign(expr.name, &value) {
             Ok(()) => return Ok(value),
             Err(err) => return Err(err),
@@ -175,14 +166,8 @@ impl<'a> Interpreter<'a> {
     }
 
     fn visit_binary(&mut self, expr: Binary) -> Result<Object, (Token, String)> {
-        let left = match self.evaluate(*expr.left) {
-            Ok(object) => object,
-            Err(err) => return Err(err),
-        };
-        let right = match self.evaluate(*expr.right) {
-            Ok(object) => object,
-            Err(err) => return Err(err),
-        };
+        let left = self.evaluate(*expr.left)?;
+        let right = self.evaluate(*expr.right)?;
         match expr.operator.token_type {
             TokenType::Minus => {
                 if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
@@ -194,19 +179,13 @@ impl<'a> Interpreter<'a> {
                 return Ok(Object::Number(left - right));
             }
             TokenType::Slash => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Number(left / right));
             }
             TokenType::Star => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Number(left * right));
@@ -225,37 +204,25 @@ impl<'a> Interpreter<'a> {
                 }
             }
             TokenType::Greater => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Boolean(left > right));
             }
             TokenType::GreaterEqual => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Boolean(left >= right));
             }
             TokenType::Less => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Boolean(left < right));
             }
             TokenType::LessEqual => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
-                {
-                    return Err((token, string));
-                }
+                self.check_number_binary(expr.operator, &left, &right)?;
                 let left = Object::number(left);
                 let right = Object::number(right);
                 return Ok(Object::Boolean(left <= right));
@@ -329,15 +296,12 @@ impl<'a> Interpreter<'a> {
         return self.evaluate(*expr.expression);
     }
 
-    fn visit_literal(&mut self, expr: Lit) -> Object {
-        return expr.value;
+    fn visit_literal(&mut self, expr: Lit) -> Result<Object, (Token, String)> {
+        Ok(expr.value)
     }
 
     fn visit_logical_expr(&mut self, expr: Logical) -> Result<Object, (Token, String)> {
-        let left = match self.evaluate(*expr.left) {
-            Ok(expr) => expr,
-            Err(err) => return Err(err),
-        };
+        let left = self.evaluate(*expr.left)?;
         if let TokenType::Or = expr.operator.token_type {
             if self.is_truthy(&left) {
                 return Ok(left);
@@ -351,13 +315,10 @@ impl<'a> Interpreter<'a> {
     }
 
     fn visit_unary(&mut self, expr: Unary) -> Result<Object, (Token, String)> {
-        let mut right = match self.evaluate(*expr.right) {
-            Ok(expr) => expr,
-            Err(err) => return Err(err),
-        };
+        let mut right = self.evaluate(*expr.right)?;
         match expr.operator.token_type {
             TokenType::Minus => {
-                self.check_number_operand(expr.operator, &right);
+                self.check_number_operand(expr.operator, &right)?;
                 if let Object::Number(number) = right {
                     return Ok(Object::Number(-number));
                 }

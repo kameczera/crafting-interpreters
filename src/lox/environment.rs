@@ -31,7 +31,6 @@ impl<'a> Environment<'a> {
 
     pub fn define(&mut self, name: Vec<u8>, value: Object) {
         self.values.insert(name, value);
-        println!("{:?}", self.values);
     }
 
     pub fn get(&self, name: Token) -> Result<Object, (Token, String)> {

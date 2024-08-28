@@ -61,7 +61,6 @@ impl Lox {
         let mut scanner: Scanner = Scanner::new(source);
         let tokens: &Vec<Token> = scanner.scan_tokens();
         let mut parser: Parser = Parser::new(tokens);
-        println!("{:?}", tokens);
         let expression = match parser.parse() {
             Ok(expr) => expr,
             Err((token, message)) => return self.token_error(token, message),

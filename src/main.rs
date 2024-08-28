@@ -24,7 +24,7 @@ fn main() {
         println!("Usage: jlox [script]");
         process::exit(1);
     } else if args.len() == 2 {
-        let _ = lox.run_file(&args[0]).unwrap_or_else(|_| {
+        let _ = lox.run_file(&args[1]).unwrap_or_else(|_| {
             println!("Error");
         });
     } else {

@@ -104,6 +104,9 @@ impl Parser<'_> {
     }
 
     fn statement(&mut self) -> Result<Statement, (Token, String)> {
+        if self.mtch(vec![TokenType::For]) {
+            return self.for_statement();
+        }
         if self.mtch(vec![TokenType::If]) {
             return self.if_statement();
         }
@@ -122,6 +125,53 @@ impl Parser<'_> {
             return Ok(Statement::block(statements));
         }
         return self.expression_statement();
+    }
+
+    fn for_statement(&mut self) -> Result<Statement, (Token, String)> {
+        self.consume(TokenType::LeftParen, String::from("Expect '(' after 'for'."))?;
+
+        let initializer;
+        if self.mtch(vec![TokenType::Semicolon]) {
+            initializer = Statement::Null;
+        } else if self.mtch(vec![TokenType::Var]) {
+            initializer = self.var_declaration()?;
+        } else {
+            initializer = self.expression_statement()?;
+        }
+
+        let mut condition = Expr::Null;
+        if !self.check(TokenType::Semicolon) {
+            condition = self.expression()?;
+        }
+
+        self.consume(TokenType::Semicolon, String::from("Expect ';' after for clauses.")) ?;
+        
+        let mut increment = Expr::Null;
+        if !self.check(TokenType::RightParen) {
+            increment = self.expression()?;
+        }
+        
+        self.consume(TokenType::RightParen, String::from("Expect ')' after for clauses."))?;
+
+        let mut body = self.statement()?;
+
+        match increment {
+            Expr::Null => (),
+            _ => body = Statement::block(vec![body, Statement::expression(increment)]),
+        }
+
+        if let Expr::Null = condition {
+            condition = Expr::literal(Object::Boolean(true));
+        }
+
+        body = Statement::while_branch(condition, body);
+
+        match initializer {
+            Statement::Null => (),
+            _ => body = Statement::block(vec![initializer, body]),
+        }
+
+        return Ok(body);
     }
 
     fn if_statement(&mut self) -> Result<Statement, (Token, String)> {
