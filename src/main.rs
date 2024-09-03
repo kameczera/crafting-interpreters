@@ -13,6 +13,7 @@ mod lox {
     pub mod stmt;
     pub mod environment;
     pub mod objects;
+    pub mod exception;
 }
 
 use crate::lox::lang::Lox;

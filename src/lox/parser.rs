@@ -10,6 +10,7 @@ use super::objects::*;
 pub struct Parser<'a> {
     tokens: &'a Vec<Token>,
     current: usize,
+    loop_counter: u32,
 }
 
 impl Parser<'_> {
@@ -17,16 +18,21 @@ impl Parser<'_> {
         Parser {
             tokens: tokens,
             current: 0,
+            loop_counter: 0,
         }
     }
     
-    pub fn parse(&mut self) -> Result<Vec<Statement>, (Token, String)> {
+    pub fn parse(&mut self) -> Result<Vec<Statement>, Vec<(Token, String)>> {
         let mut statements = vec![];
+        let mut errors = vec![];
         while !self.is_at_end() {
             match self.declaration() {
                 Ok(statement) => statements.push(statement),
-                Err(err) => return Err(err),
+                Err(err) => errors.push(err),
             }
+        }
+        if errors.len() > 0 {
+            return Err(errors);
         }
         return Ok(statements);
     }
@@ -42,10 +48,7 @@ impl Parser<'_> {
         };
         if self.mtch(vec![TokenType::Equal]) {
             let equals: Token = self.previous().clone();
-            let value = match self.assignment() {
-                Ok(expr) => expr,
-                Err(err) => return Err(err),
-            };
+            let value = self.assignment()?;
             match expr {
                 Expr::Variable(variable) => {
                     let name = variable.name;
@@ -64,10 +67,7 @@ impl Parser<'_> {
         };
         while self.mtch(vec![TokenType::Or]) {
             let operator = self.previous().clone();
-            let right = match self.and() {
-                Ok(expr) => expr,
-                Err(err) => return Err(err),
-            };
+            let right = self.and()?;
             expr = Expr::logical(expr, operator, right);
         }
         return Ok(expr);
@@ -80,10 +80,7 @@ impl Parser<'_> {
         };
         while self.mtch(vec![TokenType::And]) {
             let operator = self.previous().clone();
-            let right = match self.equality() {
-                Ok(expr) => expr,
-                Err(err) => return Err(err),
-            };
+            let right = self.equality()?;
             expr = Expr::logical(expr, operator, right)
         }
         return Ok(expr);
@@ -116,12 +113,15 @@ impl Parser<'_> {
         if self.mtch(vec![TokenType::While]) {
             return self.while_statement();
         }
+        if self.mtch(vec![TokenType::Break]) {
+            return self.break_statement();
+        }
+        if self.mtch(vec![TokenType::Continue]) {
+            return self.continue_statement();
+        }
 
         if self.mtch(vec![TokenType::LeftBrace]) {
-            let statements = match self.block() {
-                Ok(statements) => statements,
-                Err(err) => return Err(err),
-            };
+            let statements = self.block()?;
             return Ok(Statement::block(statements));
         }
         return self.expression_statement();
@@ -144,7 +144,7 @@ impl Parser<'_> {
             condition = self.expression()?;
         }
 
-        self.consume(TokenType::Semicolon, String::from("Expect ';' after for clauses.")) ?;
+        self.consume(TokenType::Semicolon, String::from("Expect ';' after for clauses."))?;
         
         let mut increment = Expr::Null;
         if !self.check(TokenType::RightParen) {
@@ -153,7 +153,9 @@ impl Parser<'_> {
         
         self.consume(TokenType::RightParen, String::from("Expect ')' after for clauses."))?;
 
+        self.loop_counter += 1;
         let mut body = self.statement()?;
+        self.loop_counter -= 1;
 
         match increment {
             Expr::Null => (),
@@ -175,26 +177,16 @@ impl Parser<'_> {
     }
 
     fn if_statement(&mut self) -> Result<Statement, (Token, String)> {
-        if let Err(err) = self.consume(TokenType::LeftParen, String::from("Expect '(' after 'if'.")) {
-            return Err(err)
-        }
+        self.consume(TokenType::LeftParen, String::from("Expect '(' after 'if'."))?;
         let condition = match self.expression() {
             Ok(expr) => expr,
             Err(err) => return Err(err),
         };
-        if let Err(err) = self.consume(TokenType::RightParen, String::from("Expect ')' after 'if'.")) {
-            return Err(err)
-        }
-        let then_branch = match self.statement() {
-            Ok(expr) => expr,
-            Err(err) => return Err(err),
-        };
+        self.consume(TokenType::RightParen, String::from("Expect ')' after 'if'."))?;
+        let then_branch = self.statement()?;
         let mut else_branch = Statement::Null;
         if self.mtch(vec![TokenType::Else]) {
-            else_branch = match self.statement() {
-                Ok(expr) => expr,
-                Err(err) => return Err(err),
-            };
+            else_branch = self.statement()?;
         }
         return Ok(Statement::if_branch(condition, then_branch, else_branch))
     }
@@ -204,10 +196,7 @@ impl Parser<'_> {
             Ok(expr) => expr,
             Err(err) => return Err(err),
         };
-        match self.consume(TokenType::Semicolon, String::from("Expect ';' after value.")) {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        }
+        self.consume(TokenType::Semicolon, String::from("Expect ';' after value."))?;
         return Ok(Statement::print(unwraped_expr));
     }
 
@@ -225,18 +214,12 @@ impl Parser<'_> {
                 Err(err) => return Err(err),
             }
         }
-        match self.consume(TokenType::Semicolon, String::from("Expect ';' after variable declaration.")) {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        }
+        self.consume(TokenType::Semicolon, String::from("Expect ';' after variable declaration."))?;
         return Ok(Statement::var(name, initializer));
     }
 
     fn while_statement(&mut self) -> Result<Statement, (Token, String)> {
-        match self.consume(TokenType::LeftParen, String::from("Expect '(' after 'while'.")) {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        }
+        self.consume(TokenType::LeftParen, String::from("Expect '(' after 'while'."))?;
         let condition = match self.expression() {
             Ok(statement) => statement,
             Err(err) => {return Err(err)},
@@ -245,10 +228,12 @@ impl Parser<'_> {
             Ok(_) => (),
             Err(err) => return Err(err),
         }
+        self.loop_counter += 1;
         let body = match self.statement() {
             Ok(statement) => statement,
             Err(err) => return Err(err),
         };
+        self.loop_counter -= 1;
         return Ok(Statement::while_branch(condition, body));
         
     }
@@ -264,6 +249,22 @@ impl Parser<'_> {
         }
         return Ok(Statement::expression(unwraped_expr));
     }
+
+    fn break_statement(&mut self) -> Result<Statement, (Token, String)> {
+        if self.loop_counter > 0 {
+            self.consume(TokenType::Semicolon, String::from("Expect ';' after variable declaration."))?;
+            return Ok(Statement::Break);
+        }
+        return Err((self.peek().clone(), String::from("Use of 'break' not allowed.")))
+    }
+
+    fn continue_statement(&mut self) -> Result<Statement, (Token, String)> {
+        if self.loop_counter > 0 {
+            self.consume(TokenType::Semicolon, String::from("Expect ';' after variable declaration."))?;
+            return Ok(Statement::Continue);
+        }
+        return Err((self.peek().clone(), String::from("Use of 'continue' not allowed.")))
+    }
     
     fn block(&mut self) -> Result<Vec<Statement>, (Token, String)> {
         let mut statements: Vec<Statement> = vec![];
@@ -274,7 +275,7 @@ impl Parser<'_> {
                 Err(err) => return Err(err),
             }
         }
-        self.consume(TokenType::RightBrace, String::from("Expect '}' after block."));
+        self.consume(TokenType::RightBrace, String::from("Expect '}' after block."))?;
         return Ok(statements);
     }
     

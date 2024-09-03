@@ -42,6 +42,8 @@ pub enum Statement {
     Print(Print),
     Var(Var),
     While(While),
+    Break,
+    Continue,
     Null,
 }
 

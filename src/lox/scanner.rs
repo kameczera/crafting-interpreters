@@ -18,7 +18,7 @@ impl Scanner {
             tokens: vec![],
             start: 0,
             current: 0,
-            line: 0,
+            line: 1,
             keywords: HashMap::from([
                 (b"and".to_vec(), TokenType::And),
                 (b"class".to_vec(), TokenType::Class),
@@ -35,6 +35,8 @@ impl Scanner {
                 (b"this".to_vec(), TokenType::This),
                 (b"true".to_vec(), TokenType::True),
                 (b"var".to_vec(), TokenType::Var),
+                (b"break".to_vec(), TokenType::Break),
+                (b"continue".to_vec(), TokenType::Break),
                 (b"while".to_vec(), TokenType::While),
                 ])
         }
@@ -112,7 +114,7 @@ impl Scanner {
             },
             b' ' => {},
             b'\r' => {},
-            b'\n' => {},
+            b'\n' => {self.line += 1;},
             b'"' => {
                 self.string();
             }

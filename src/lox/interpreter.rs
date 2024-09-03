@@ -3,8 +3,7 @@ use std::mem;
 use std::rc::Rc;
 
 use super::{
-    environment,
-    objects::{self, *},
+    environment, exception::{self, Exception}, objects::*
 };
 
 use super::{
@@ -26,7 +25,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<Object, (Token, String)> {
+    pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<Object, Exception> {
         for statement in statements {
             match self.execute(statement) {
                 Ok(object) => match object {
@@ -39,7 +38,7 @@ impl<'a> Interpreter<'a> {
         return Ok(Object::Nil);
     }
 
-    fn evaluate(&mut self, expr: Expr) -> Result<Object, (Token, String)> {
+    fn evaluate(&mut self, expr: Expr) -> Result<Object, Exception> {
         match expr {
             Expr::Binary(expr) => self.visit_binary(expr),
             Expr::Grouping(expr) => self.visit_grouping(expr),
@@ -53,67 +52,62 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn execute(&mut self, statement: Statement) -> Result<Object, (Token, String)> {
+    fn execute(&mut self, statement: Statement) -> Result<Object, Exception> {
         match statement {
-            Statement::Expression(expression) => {
-                self.visit_expression_statement(*expression.expression)
-            }
+            Statement::Expression(expression) => self.visit_expression_statement(*expression.expression),
             Statement::Print(print) => self.visit_print_statement(*print.expression),
             Statement::Var(var) => self.visit_var_statement(var),
             Statement::Block(block) => self.visit_block_statement(block),
             Statement::If(if_branch) => self.visit_if_statement(if_branch),
             Statement::While(while_branch) => self.visit_while_statement(while_branch),
+            Statement::Break => self.visit_break_statement(),
+            // Statement::Continue => self.visit_continue_statement(),
             // Null is used just for else statements
             Statement::Null => Ok(Object::Nil),
+            _ => Ok(Object::Nil),
         }
     }
 
-    fn execute_block(
-        &mut self,
-        statements: Vec<Statement>,
-        mut old_env: Rc<RefCell<environment::Environment<'a>>>,
-    ) -> Result<Object, (Token, String)> {
+    fn execute_block(&mut self, statements: Vec<Statement>, mut old_env: Rc<RefCell<environment::Environment<'a>>>,) -> Result<Object, Exception> {
         for statement in statements {
-            if let Err(err) = self.execute(statement) {
-                return Err(err);
-            }
+            self.execute(statement)?;
         }
         mem::swap(&mut self.environment, &mut old_env);
         return Ok(Object::Nil);
     }
 
-    fn visit_block_statement(&mut self, block: Block) -> Result<Object, (Token, String)> {
+    fn visit_block_statement(&mut self, block: Block) -> Result<Object, Exception> {
         let new_env = Environment::new_child(Rc::clone(&self.environment));
         let old_env = mem::replace(&mut self.environment, new_env);
         self.execute_block(block.statements, old_env)
     }
 
-    fn visit_expression_statement(&mut self, expr: Expr) -> Result<Object, (Token, String)> {
+    fn visit_expression_statement(&mut self, expr: Expr) -> Result<Object, Exception> {
         match self.evaluate(expr) {
             Ok(object) => return Ok(object),
             Err(err) => return Err(err),
         }
     }
 
-    fn visit_if_statement(&mut self, if_branch: If) -> Result<Object, (Token, String)> {
+    fn visit_if_statement(&mut self, if_branch: If) -> Result<Object, Exception> {
         let boolean = match self.evaluate(*if_branch.condition) {
             Ok(bool) => bool,
             Err(err) => return Err(err),
         };
         if self.is_truthy(&boolean) {
-            self.execute(*if_branch.then_branch);
+            self.execute(*if_branch.then_branch)?;
         } else {
             match *if_branch.else_branch {
                 Statement::Null => return Ok(Object::Nil),
                 _ => {
-                    self.execute(*if_branch.else_branch);
+                    self.execute(*if_branch.else_branch)?;
                 }
             }
         }
         return Ok(Object::Nil);
     }
 
-    fn visit_print_statement(&mut self, expr: Expr) -> Result<Object, (Token, String)> {
+    fn visit_print_statement(&mut self, expr: Expr) -> Result<Object, Exception> {
         let value = self.evaluate(expr);
         match value {
             Ok(object) => {
@@ -124,7 +118,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn visit_var_statement(&mut self, statement: Var) -> Result<Object, (Token, String)> {
+    fn visit_var_statement(&mut self, statement: Var) -> Result<Object, Exception> {
         let mut value = Object::Nil;
         match *statement.initializer {
             Expr::Literal(Lit { value: Object::Nil }) => (),
@@ -141,13 +135,21 @@ impl<'a> Interpreter<'a> {
         return Ok(Object::Nil);
     }
 
-    fn visit_while_statement(&mut self, statement: While) -> Result<Object, (Token, String)> { 
+    fn visit_while_statement(&mut self, statement: While) -> Result<Object, Exception> { 
         loop {
             let condition = self.evaluate(*statement.condition.clone())?;
             if self.is_truthy(&condition) {
                 match self.execute(*statement.body.clone()) {
                     Ok(_) => (),
-                    Err(err) => return Err(err),
+                    Err(err) => {
+                        match err {
+                            Exception::Error(_) => return Err(err),
+                            Exception::Continue => continue,
+                            Exception::Break => {break},
+                            _ => (),
+                        }
+                        
+                    },
                 }
             } else {
                 break;
@@ -157,7 +159,11 @@ impl<'a> Interpreter<'a> {
         return Ok(Object::Nil);
     }
 
-    fn visit_assign_expr(&mut self, expr: Assign) -> Result<Object, (Token, String)> {
+    fn visit_break_statement(&mut self) -> Result<Object, Exception> {
+        return Err(Exception::Break)
+    }
+
+    fn visit_assign_expr(&mut self, expr: Assign) -> Result<Object, Exception> {
         let value = self.evaluate(*expr.value)?;
         match self.environment.borrow_mut().assign(expr.name, &value) {
             Ok(()) => return Ok(value),
@@ -165,14 +171,14 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn visit_binary(&mut self, expr: Binary) -> Result<Object, (Token, String)> {
+    fn visit_binary(&mut self, expr: Binary) -> Result<Object, Exception> {
         let left = self.evaluate(*expr.left)?;
         let right = self.evaluate(*expr.right)?;
         match expr.operator.token_type {
             TokenType::Minus => {
-                if let Err((token, string)) = self.check_number_binary(expr.operator, &left, &right)
+                if let Err(Exception) = self.check_number_binary(expr.operator, &left, &right)
                 {
-                    return Err((token, string));
+                    return Err(Exception);
                 }
                 let left = Object::number(left);
                 let right = Object::number(right);
@@ -232,10 +238,7 @@ impl<'a> Interpreter<'a> {
             _ => return Ok(Object::Nil),
         }
         // Unreachable
-        return Err((
-            Token::new(TokenType::And, b"".to_vec(), 0, TokenLiteral::None),
-            String::from(""),
-        ));
+        return Err(Exception::Null);
     }
 
     fn is_equal(&mut self, a: Object, b: Object) -> bool {
@@ -267,7 +270,7 @@ impl<'a> Interpreter<'a> {
         return object.to_string();
     }
 
-    fn visit_ternary(&mut self, expr: Ternary) -> Result<Object, (Token, String)> {
+    fn visit_ternary(&mut self, expr: Ternary) -> Result<Object, Exception> {
         let expression = match self.evaluate(*expr.expression) {
             Ok(expr) => expr,
             Err(err) => return Err(err),
@@ -286,21 +289,18 @@ impl<'a> Interpreter<'a> {
             _ => (),
         }
         // Unreachable
-        return Err((
-            Token::new(TokenType::And, b"".to_vec(), 0, TokenLiteral::None),
-            String::from(""),
-        ));
+        return Err(Exception::Null);
     }
 
-    fn visit_grouping(&mut self, expr: Grouping) -> Result<Object, (Token, String)> {
+    fn visit_grouping(&mut self, expr: Grouping) -> Result<Object, Exception> {
         return self.evaluate(*expr.expression);
     }
 
-    fn visit_literal(&mut self, expr: Lit) -> Result<Object, (Token, String)> {
+    fn visit_literal(&mut self, expr: Lit) -> Result<Object, Exception> {
         Ok(expr.value)
     }
 
-    fn visit_logical_expr(&mut self, expr: Logical) -> Result<Object, (Token, String)> {
+    fn visit_logical_expr(&mut self, expr: Logical) -> Result<Object, Exception> {
         let left = self.evaluate(*expr.left)?;
         if let TokenType::Or = expr.operator.token_type {
             if self.is_truthy(&left) {
@@ -314,7 +314,7 @@ impl<'a> Interpreter<'a> {
         return self.evaluate(*expr.right);
     }
 
-    fn visit_unary(&mut self, expr: Unary) -> Result<Object, (Token, String)> {
+    fn visit_unary(&mut self, expr: Unary) -> Result<Object, Exception> {
         let mut right = self.evaluate(*expr.right)?;
         match expr.operator.token_type {
             TokenType::Minus => {
@@ -329,13 +329,10 @@ impl<'a> Interpreter<'a> {
             _ => (),
         }
         // Unreachable
-        return Err((
-            Token::new(TokenType::And, b"".to_vec(), 0, TokenLiteral::None),
-            String::from(""),
-        ));
+        return Err(Exception::Null);
     }
 
-    fn visit_variable(&mut self, expr: Variable) -> Result<Object, (Token, String)> {
+    fn visit_variable(&mut self, expr: Variable) -> Result<Object, Exception> {
         let t = self.environment.borrow_mut().get(expr.name);
         return t;
     }
@@ -344,11 +341,11 @@ impl<'a> Interpreter<'a> {
         &mut self,
         operator: Token,
         operand: &Object,
-    ) -> Result<(), (Token, String)> {
+    ) -> Result<(), Exception> {
         if let Object::Number(number) = operand {
             return Ok(());
         }
-        return Err((operator, String::from("Operand must be a number.")));
+        return Err(Exception::error(operator, String::from("Operand must be a number.")));
     }
 
     fn check_number_binary(
@@ -356,13 +353,13 @@ impl<'a> Interpreter<'a> {
         operator: Token,
         left: &Object,
         right: &Object,
-    ) -> Result<(), (Token, String)> {
+    ) -> Result<(), Exception> {
         if let Object::Number(_number) = left {
             if let Object::Number(_number) = right {
                 return Ok(());
             }
         }
-        return Err((operator, String::from("Operand must be numbers.")));
+        return Err(Exception::error(operator, String::from("Operand must be numbers.")));
     }
 
     fn is_truthy(&mut self, object: &Object) -> bool {

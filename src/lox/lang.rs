@@ -8,6 +8,7 @@ use std::process;
 use crate::lox::expr;
 use crate::lox::interpreter;
 
+use super::exception::Exception;
 use super::interpreter::Interpreter;
 use super::token_type::TokenType;
 
@@ -63,23 +64,29 @@ impl Lox {
         let mut parser: Parser = Parser::new(tokens);
         let expression = match parser.parse() {
             Ok(expr) => expr,
-            Err((token, message)) => return self.token_error(token, message),
+            Err(errors) => {
+                for error in errors {
+                    self.token_error(error.0, error.1);
+                }
+                return;
+            },
         };
         let mut interpreter: Interpreter = Interpreter::new();
         match interpreter.interpret(expression) {
             Ok(_) => (),
             Err(err) => self.run_time_error(err),
         }
-
     }
 
     pub fn error(&mut self, line: u32, message: String) {
         self.report(line, String::new(), message);
     }
 
-    pub fn run_time_error(&mut self, err: (Token, String)) {
-        println!("{} \n[line {}]", err.1, err.0.line);
-        self.had_runtime_error = true;
+    pub fn run_time_error(&mut self, err: Exception) {
+        if let Exception::Error(err) = err {
+            println!("{} \n[line {}]", err.string, err.token.line);
+            self.had_runtime_error = true;
+        }
     }
 
     pub fn report(&mut self, line: u32, col: String, message: String) {
@@ -87,7 +94,7 @@ impl Lox {
         self.had_error = true;
     }
 
-    pub fn token_error(&mut self, token: Token, message: String){
+    pub fn token_error(&mut self, token: Token, message: String) {
         if let TokenType::Eof = token.token_type {
             self.report(token.line, String::from("at end"), message);
         } else {
