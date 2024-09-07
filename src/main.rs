@@ -14,6 +14,7 @@ mod lox {
     pub mod environment;
     pub mod objects;
     pub mod exception;
+    pub mod lox_callable;
 }
 
 use crate::lox::lang::Lox;

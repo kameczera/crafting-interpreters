@@ -1,1 +1,1 @@
-C:\workspace\rust\lox\target\debug\liblox.rlib: C:\workspace\rust\lox\src\lib.rs
+/home/kamei/Documentos/projects/crafting-interpreters/target/debug/liblox.rlib: /home/kamei/Documentos/projects/crafting-interpreters/src/lib.rs

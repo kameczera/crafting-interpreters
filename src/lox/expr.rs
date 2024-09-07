@@ -48,6 +48,14 @@ pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
 }
+
+#[derive(Debug, Clone)]
+pub struct Call {
+    pub callee: Box<Expr>,
+    pub paren: Token,
+    pub arguments: Vec<Expr>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Binary(Binary),
@@ -58,6 +66,7 @@ pub enum Expr {
     Ternary(Ternary),
     Unary(Unary),
     Variable(Variable),
+    Call(Call),
     Null,
 }
 
@@ -104,6 +113,7 @@ impl Expr {
             expression: Box::new(expression),
         })
     }
+    
     pub fn variable(name: Token) -> Self {
         Expr::Variable(Variable {
             name: name,
@@ -114,6 +124,14 @@ impl Expr {
         Expr::Assign(Assign {
             name: name,
             value: Box::new(value),
+        })
+    }
+
+    pub fn call(callee: Expr, paren: Token, arguments: Vec<Expr>) -> Self {
+        Expr::Call(Call {
+            callee: Box::new(callee),
+            paren: paren,
+            arguments: arguments,
         })
     }
 }

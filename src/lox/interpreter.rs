@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 
 use super::{
-    environment, exception::{self, Exception}, objects::*
+    environment, exception::{self, Exception}, lang::Lox, lox_callable::LoxCallable, objects::{self, *}
 };
 
 use super::{
@@ -48,6 +48,7 @@ impl<'a> Interpreter<'a> {
             Expr::Ternary(expr) => self.visit_ternary(expr),
             Expr::Variable(expr) => self.visit_variable(expr),
             Expr::Assign(expr) => self.visit_assign_expr(expr),
+            Expr::Call(expr) => self.visit_call_expr(expr),
             Expr::Null => return Ok(Object::Nil),
         }
     }
@@ -239,6 +240,21 @@ impl<'a> Interpreter<'a> {
         }
         // Unreachable
         return Err(Exception::Null);
+    }
+
+    fn visit_call_expr(&mut self, expr: Call) -> Result<Object, Exception> {
+        let callee = self.evaluate(*expr.callee)?;
+
+        let arguments: Vec<Object> = vec![];
+        for argument in expr.arguments {
+            arguments.push(self.evaluate(argument)?);
+        }
+
+        let function: LoxCallable = callee as LoxCallable;
+        if arguments.len() != function.arity() {
+            
+        }
+        return function.call(self, arguments);
     }
 
     fn is_equal(&mut self, a: Object, b: Object) -> bool {

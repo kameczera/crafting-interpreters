@@ -1,6 +1,4 @@
 for(var a = 10; a > 0; a = a - 1) {
-    if(a == 5){
-        print a;
-    }
-    break;
+    print a;
 }
+
